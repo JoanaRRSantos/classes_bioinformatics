@@ -1,0 +1,185 @@
+---
+title: "Análise de alterações *post-mortem* nas composições metabolicas no sangue de coelho, humores aquoso e vitreo"
+author: "Carolina Torre, Cátia Gonçalves e Joana Santos"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+library(specmine)
+library(ggplot2)
+library(knitr)
+
+MTBLS349_data=read_dataset_csv(filename.data="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/data.csv",filename.meta="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/metadata.csv", type="concentrations", description = "Concentrations data taken from MetaboLights study MTBLS349", label.x = "Names", label.values = "Concentrations")
+
+MTBLS349_data$metadata$tt=paste(MTBLS349_data$metadata$Tissue,MTBLS349_data$metadata$Time)
+MTBLS349_data$metadata$tt=as.factor(MTBLS349_data$metadata$tt)
+```
+
+A análise de alterações metabólicas *post-mortem* em fluidos biológicos abre um novo caminho para o desenvolvimento de novos métodos para a estimativa do intervalo *post-mortem* (PMI).  Estas análises podem também ajudar na análise de alterações metabólicas induzidas por doenças em tecidos humanos quando as amostras pós-operatórias são comparadas com as amostras *post-mortem* de doadores saudáveis. 
+Este estudo teve como objetivos a classificação e observação das alteraçõees *post-mortem* ocorridas no sangue, no humor aquoso (AH) e no humor vítreo (VH) dos coelhos, para identificar os potenciais marcadores de PMI entre uma ampla gama de metabolitos, e também para determinar quais os fluidos biológicos- sangue, AH ou VH- que é mais adequado para a estimativa de PMI.
+
+
+## Análise dos Componentes Principais (PCA)
+O PCA é uma ferramenta estatística usada para explorar datasets complexos, através desta, pode-se resumir uma grande quantidade de dados pelo reconhecimento do seu conteúdo de informação mais relevante. O PCA é reconhecido como uma técnica de filtragem que capta os principais componentes dos dados criando um conjunto de variáveis não-relacionadas designadas de variáveis latentes, enquanto revela a sua estrutura subjacente.
+
+```{r Análise PCA, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+pca_analysis=pca_analysis_dataset(MTBLS349_data,scale=T,center=T,write.file=F)
+```
+
+### Tabela com a importância da análise dos componentes principais:
+
+Foi utilizado o dataset inteiro tratado na primeira fase do trabalho, com normalização dos dados.
+```{r Importancia, echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE, results='asis'}
+pca_importance=pca_importance(pca_analysis,pcs = 1:length(pca_analysis$sdev), sd = T,prop = T, cumul = T, min.cum = NULL)
+```
+```{r echo=FALSE}
+kable(pca_importance)
+```
+
+
+### Gráfico da análise dos componentes principais:
+
+```{r grafico pca, echo=TRUE, fig.show='hold'}
+pca_screeplot=pca_screeplot(pca_analysis)
+```
+
+De acordo com o pca_importance e o pca_screeplot, podemos observar que, ao contrário do esperado visto que temos quatro variáveis para este dataset, são necessários 6 Componentes Principais (PC) para explicar 90% da variabilidade do dataset enquanto que com 4 variáveis principais somente 80% da variabilidade do dataset é explicado.
+
+### Gráfico 2D com os dois PCA's principais:
+```{r Grafico 2d, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+pca_scoresplot2D(MTBLS349_data,pca_analysis, "tt", pcas=c(1,2), labels = TRUE)
+```
+
+Ao analisar os dois primeiros PCA's conseguimos concluir que todas as amostras de "Blood serum 0" que representam as amostras de sangue retiradas *ante-mortem*, "Blood serum 10" que representam as amostras de sangue retiradas *post-mortem*, "Aqueous humor 10" que representam as amostras retirados do humor aquoso e "Vitrous humor 10" que representam as amostras retiradas do humor vítreo estão agrupadas com a exceção da amostra R3VH1, no entanto os dois primeiros PCA's, apenas representam 53% da variabilidade do dataset total que está a ser estudado. 
+Por este motivo, recorremos à função pca_scoresplot3D_rgl para observar o agrupamentos das amostras utlizando 3 PCA's. 
+
+```{r Grafico 3d, echo=TRUE, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+pca_scoresplot3D_rgl(MTBLS349_data,pca_analysis, "tt", pcas = c(1,2,3), labels = TRUE)
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+knitr::include_graphics("scoreplot3d.png")
+```
+
+
+Com o plot a 3D, é ainda mais evidente o agrupamento entre as amostras de acordo com o esperado, assim como a discrepância entre a amostra R3VH1 e as restantes do grupo "vitreous humor 10".
+
+### Gráfico biplot com os dois PCA's principais:
+```{r Grafico biplot, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+pca_biplot(MTBLS349_data,pca_analysis)
+```
+
+Neste  gráfico observa-se que as amostras de "humor aquoso" não apresentam uma forte correlação com os dois primeiros PC's, apresentando, no entanto uma alta influência nos aminoácidos essenciais lisina e leucina. A lisina, a leucina, a alanina, entre os outros metabolitos presentes no mesmo quadrante influenciam negativamente tanto o PC1 como o PC2. 
+As amostras de sangue *post-mortem* estão positivamente correlacionadas com o PC2 mas não com o PC1. Os aminoácidos que influenciam este quadrante são o benzoato e a hipoxantina, entre outros. Nas amostras de sangue *ante-mortem* constata-se que existe uma correlação com PC2, destacando-se uma amostras (R2Bl0) por ter uma ligeira correlaçãoo com o PC1. A cholina é o único aminoácido que influencia o PC2 mas não influencia o PC1. Em relação às amostras de "humor vítreo" observa-se uma discrepância em relação a uma das amostras (R3VH1) que apresenta uma correlação positiva  com o PC1, enquanto as outras amostras apresentam correlação positiva com ambos os PC's. Alguns dos aminoácidos que influenciam positivamente o PC1 são o glutamato, taurina, entre outros aminoácidos presentos no mesmo quadrante. Para além disto, não existem aminoácidos que influenciam positivamente ambos os PC's.
+
+### Comparação dois a dois dos PCA's principais:
+```{r Grafico pairs, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+pca_pairs_plot(MTBLS349_data,pca_analysis, "tt", pcas = c(1,2,3,4,5,6))
+```
+
+Pode-se observar pela imagem que à medida que se vão correlacionando os PC's mais distantes do primeiro PC verifica-se uma maior dispersão dos dados. Isto deve-se ao facto de o PC1 explicar a maior percentagem de variabilidade do dataset, contudo à medida que nos afastamos deste a percentagem de variabilidade vai diminuindo. Verificamos que apenas ao correlacionar o PC1 com o PC2 se verifica que as amostras foram devidamente separadas.
+
+### Gráfico de K-means:
+```{r Grafico kmeans, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+pca_kmeans_plot2D(MTBLS349_data,pca_analysis, num.clusters = 4,pcas = c(1, 2), kmeans.result = NULL, labels = TRUE, bw=F, ellipses = FALSE, leg.pos = "right", xlim = NULL, ylim = NULL)
+pca_kmeans_plot3D(MTBLS349_data, pca_analysis, num.clusters = 4, pcas = c(1,2,3), labels = TRUE, ellipses = FALSE)
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+knitr::include_graphics("kmeans3d.png")
+```
+
+Fazendo o plot de k-means clustering a partir dos dois e dos três primeiros PCA's respetivamente, não é possivel agrupar as amostras de acordo com as variáveis. Isto leva a acreditar que os restantes PCAs são importantes para agrupar as amostras.
+
+## Clustering
+
+O clustering baseia-se na similaridade entre amostras para fazer o seu agrupamento, tendo como resultado grupos formados por amostras que se encontram mais próximas/semelhantes entre si. Um bom resultado para um clustering, tem uma boa homogeneidade entre as amostras de um mesmo clustering e uma significante separação entre clusterings.
+Para definir a similaridade pode-se recorrer à medição de distâncias, por métodos como a medição Euclidiana ou a de Manhattan. Através dos métodos "spearman" e "pearson" é possível medir a semelhança de formas. O K-means é um método heurístico, que apesar de não garantir uma solução ótima, é bastante eficiente. Baseia-se na geração aleatória de k centros de clusters e, atribui a cada amostra o cluster com centro mais próximo, minimizando desta forma a  média  do  quadrado  das  distâncias  de  cada  ponto  para  o   centro  do respectivo cluster.
+
+```{r clustering, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+clustering_hc_euc_samp_comp=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "complete")
+
+clustering_hc_euc_samp_wd=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "ward.D")
+
+clustering_hc_euc_samp_sg=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "single")
+
+clustering_hc_euc_samp_av=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "average")
+
+clustering_hc_euc_samp_mc=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "mcquitty")
+
+clustering_hc_euc_samp_med=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "median")
+
+clustering_hc_euc_samp_cen=clustering(MTBLS349_data,method = "hc", distance = "euclidean",type = "samples", clustMethod = "centroid")
+
+clustering_hc_man_samp_comp=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "complete")
+
+clustering_hc_man_samp_wd=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "ward.D")
+
+clustering_hc_man_samp_sg=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "single")
+
+clustering_hc_man_samp_av=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "average")
+
+clustering_hc_man_samp_mc=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "mcquitty")
+
+clustering_hc_man_samp_med=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "median")
+
+clustering_hc_man_samp_cen=clustering(MTBLS349_data,method = "hc", distance = "manhattan",type = "samples", clustMethod = "centroid")
+
+clustering_hc_per_samp_comp=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "complete")
+
+clustering_hc_per_samp_wd=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "ward.D")
+
+clustering_hc_per_samp_sg=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "single")
+
+clustering_hc_per_samp_av=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "average")
+
+clustering_hc_per_samp_mc=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "mcquitty")
+
+clustering_hc_per_samp_med=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "median")
+
+clustering_hc_per_samp_cen=clustering(MTBLS349_data,method = "hc", distance = "pearson",type = "samples", clustMethod = "centroid")
+
+clustering_hc_spe_samp_comp=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "complete")
+
+clustering_hc_spe_samp_wd=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "ward.D")
+
+clustering_hc_spe_samp_sg=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "single")
+
+clustering_hc_spe_samp_av=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "average")
+
+clustering_hc_spe_samp_mc=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "mcquitty")
+
+clustering_hc_spe_samp_med=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "median")
+
+clustering_hc_spe_samp_cen=clustering(MTBLS349_data,method = "hc", distance = "spearman",type = "samples", clustMethod = "centroid")
+```
+
+### Dendograma do clustering hierárquico:
+```{r dendograma, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+dendrogram_plot_col(MTBLS349_data,clustering_hc_spe_samp_wd,'tt')
+```
+
+Após fazermos o clustering das amostras com combinações dos vários parâmetros, chegamos à conclusão que o melhor clustering para as nossas amostras foi obtido pela distância "spearman" e o método de clustering "ward.D". Observando o plot do dendrograma verificamos que somente as amostras de sangue se encontram misturadas no mesmo agrupamento, isto deve-se ao facto das amostras de sangue *ante-mortem* e *post-mortem* serem semelhantes como foi descrito por Zelentsova et al., (2016). 
+
+### Gráfico do clustering com K-means:
+```{r clustering kmeans, fig.show='hold', message=FALSE, warning=FALSE, paged.print=FALSE}
+clustering_km_samp=clustering(MTBLS349_data,method = "kmeans", type = "samples", num.clusters = 4)
+kmeans_plot(MTBLS349_data, clustering_km_samp)
+```
+
+Ao recorrer ao k-means clustering do dataset observamos que não é possível agrupar as amostras nos respetivos grupos o que nos leva a supor que as amostras não são tão diferentes quanto o artigo por Zelentsova et al., (2016) descreve.
+
+
+## Referências:
+-  Zelentsova, E.A., Yanshole, L.V., Snytnikova, O.A. et al. Metabolomics (2016) 12: 172.  
+-  https://doi.org/10.1007/s11306-016-1118-2
+-  https://cran.r-project.org/web/packages/specmine/index.html
+-  http://bioconductor.riken.jp/packages/3.7/bioc/vignettes/FELLA/inst/doc/FELLA.pdf

@@ -1,0 +1,301 @@
+---
+title: "An?lise de altera??es *post-mortem* nas composi??es metabolicas no sangue de coelho, humores aquoso e vitreo"
+author: "Carolina Torre, C?tia Gon?alves e Joana Santos"
+date: "2019-04-17"
+output: html_document
+---
+A an?lise de altera??es metab?licas post-mortem em fluidos biol?gicos abre um novo caminho para o desenvolvimento de novos m?todos para a estimativa do intervalo *post-mortem* (PMI).  Estas an?lises podem tamb?m ajudar na an?lise de altera??es metab?licas induzidas por doen?as em tecidos humanos quando as amostras p?s-operat?rias s?o comparadas com as amostras *post-mortem* de doadores saud?veis. 
+Este estudo teve como objetivos a classifica??o e observa??o das altera??es *post-mortem* ocorridas no sangue, no humor aquoso (AH) e no humor v?treo (VH) dos coelhos, para identificar os potenciais marcadores de PMI entre uma ampla gama de metabolitos, e tamb?m para determinar quais os fluidos biol?gicos- sangue, AH ou VH- que ? mais adequado para a estimativa de PMI.
+
+
+```{r echo=TRUE}
+source('get_MBTLS_studies_v2.R')
+library(specmine)
+library(MassSpecWavelet)
+library(rcytoscapejs)
+library(KEGGREST)
+library(KEGGgraph)
+library(FELLA)
+library(knitr)
+```
+
+##**Pr?-processamento dos dados:**
+Download dos ficheiros:
+```{r}
+directory="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao"
+```
+
+Carregar os ficheiros com os dados n?o processados:
+```{r}
+original_file =read.csv("m_rabpmi_metabolite_profiling_NMR_spectroscopy_v2_maf.tsv", sep="\t", header = TRUE)
+```
+
+Retirar dados n?o num?ricos e NA?s:
+```{r}
+data=t(original_file[,c(19:30)])
+colnames(data)=original_file[,5]
+```
+
+Carregar os ficheiros de metadados:
+```{r}
+original_meta_file=read.csv("s_RabPMI.txt", sep="\t", header =T, stringsAsFactors=F)
+```
+
+Organizar as amostras de acordo com os metadados:
+```{r}
+data <- data[c(3,4,2,1,9,10,5,8,11,12,6,7),]
+```
+
+Calculo do n?mero de NA's:
+```{r}
+n.nas=apply(data, 2, function(x) sum(is.na(x)))
+```
+
+Retirar somente os metadados:
+```{r}
+metadata=original_meta_file[,c(10,13)]
+```
+
+Adicionar nome das amostras e substituir nome das colunas:
+```{r}
+rownames(metadata)=original_meta_file[,9]
+colnames(metadata)=c("Tissue","Time")
+```
+
+Escrever o dataset e os metadados num ficheiro csv:
+```{r}
+write.csv(data, "C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/data.csv")
+write.csv(metadata,  "C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/metadata.csv")
+
+MTBLS349_data=read_dataset_csv(filename.data="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/data.csv",filename.meta ="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/metadata.csv",  type="concentrations", description = "Concentrations data taken from MetaboLights study MTBLS349", label.x = "Names", label.values = "Concentrations")
+```
+##**Sum?rio do dataset:**
+```{r include=FALSE}
+summary=sum_dataset(MTBLS349_data, stats=T)
+```
+```{r echo=FALSE}
+kable(summary)
+```
+
+* Uma vez que os valores variam entre 0 e 20, n?o achamos necess?rio fazer a transforma??o dos valores.
+
+Adicionar aos metadados uma nova coluna que contem as duas vari?veis juntas:
+```{r}
+MTBLS349_data$metadata$tt=paste(MTBLS349_data$metadata$Tissue,MTBLS349_data$metadata$Time)
+MTBLS349_data$metadata$tt=as.factor(MTBLS349_data$metadata$tt)
+```
+
+* Esta adi??o foi feita para que as amostras fossem divididas em quatro grupos diferentes: 
+    -Blood Serum 0: Amostras retiradas do sangue dos coelhos **Ante-montem**;
+    -Blood Serum 10: Amostras retiradas do sangue dos coelhos 10 minutos **Post-mortem**;
+    -Vitreous Serum 10: Amostras retiradas do humor v?treos dos coelhos 10 minutos **Post-mortem**;
+    -Aqueous Serum 10: Amostras retiradas do humor aquoso dos coelhos 10 minutos **Post-mortem**;
+
+##**An?lise Estat?stica:**
+Teste estat?stico das amostras tendo em conta as vari?veis "Tissue" e "Time":
+```{r}
+MTBLS349_ANOVA1=aov_all_vars(MTBLS349_data, "tt", doTukey = T, write.file = F)
+```
+```{r Gr?fico da ANOVA}
+plot_anova(MTBLS349_data, MTBLS349_ANOVA1, anova.threshold = 0.05, reverse.x = F)
+```
+
+Filtrar somente os metabolitos com diferen?as significativas entre os grupos estabelecidos:
+```{r}
+metabolitos_significantes=MTBLS349_ANOVA1[MTBLS349_ANOVA1$fdr<0.05,]
+```
+
+Retirar os nomes dos metabolitos significativos:
+```{r}
+nomes_metabolitos=rownames(MTBLS349_ANOVA1[MTBLS349_ANOVA1$fdr<0.05,])
+```
+
+Fazer sub-Dataset com os metabolitos de interesse:
+```{r}
+MTBLS349_metabolitos_significantes=subset_x_values(MTBLS349_data,nomes_metabolitos)
+```
+
+###Fold change:
+```{r}
+fc_blood_serum_0=fold_change(MTBLS349_metabolitos_significantes,"tt","blood serum 0")
+fc_blood_serum_10=fold_change(MTBLS349_metabolitos_significantes,"tt","blood serum 10")
+fc_Aqueous_Humor_10=fold_change(MTBLS349_metabolitos_significantes,"tt","Aqueous Humor 10")
+fc_vitreous_humor_10=fold_change(MTBLS349_metabolitos_significantes,"tt","vitreous humor 10")
+```
+
+* Esta an?lise foi feita para detetar quais os metabolitos que se destacam entre cada grupo de amostra.
+
+###Gr?ficos do Fold Change:
+```{r, fig.show='hold'}
+plot_fold_change(MTBLS349_metabolitos_significantes,na.omit(fc_blood_serum_0), 2)
+plot_fold_change(MTBLS349_metabolitos_significantes,na.omit(fc_blood_serum_10), 2)
+plot_fold_change(MTBLS349_metabolitos_significantes,na.omit(fc_Aqueous_Humor_10), 2)
+plot_fold_change(MTBLS349_metabolitos_significantes,na.omit(fc_vitreous_humor_10), 2)
+```
+* A an?lise destes gr?ficos foi realizada no sub-cap?tulo Enriquecimento.
+
+###An?lise de NMR:
+
+Carregamento dos dados pelo package specmine:
+```{r}
+MTBLS349 = read_Bruker_files("C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/dados", metadata_file ="C:/Users/jrrs1/Desktop/Joana/trabalho_extracao/metadata.csv", samples.names =NULL, zipped=F, description="NMR", label.x="ppm", label.values="intensity")
+```
+
+Retirar valores omissos:
+```{r}
+MTBLS349= na.omit(MTBLS349)
+```
+
+Sum?rio do dataset:
+```{r echo=FALSE}
+kable(sum_dataset(MTBLS349, stats=T))
+```
+```{r echo=FALSE}
+boxplot_vars_factor(MTBLS349, "Tissue", variables = c("3.42", "4.86"), horizontal=T)
+boxplot_vars_factor(MTBLS349, "Tissue", variables = c("3.42", "4.86", horizontal=T))
+```
+
+* Visto que existe uma grande descrep?ncia entre os valores, visualizados pelos boxplots, foi necess?rio realizar a transforma??o dos dados.
+
+Contar valores omissos:
+```{r}
+count_missing_values(MTBLS349)
+```
+* Uma vez que n?o temos valores omissos, n?o ? necess?rio fazer tratamento adicional.
+
+Adicionar aos metadados uma nova coluna que contem as duas vari?veis juntas:
+```{r}
+MTBLS349$metadata$tt=paste(MTBLS349$metadata$Tissue,MTBLS349$metadata$Time)
+MTBLS349$metadata$tt=as.factor(MTBLS349$metadata$tt)
+```
+
+Visualiza??o do gr?fico de picos das amostras agrupadas pela vari?vel "Tissue"
+```{r}
+plot_spectra(MTBLS349,"Tissue", variable.bounds=c(0,7))
+```
+
+Dete??o dos picos de NMR:
+```{r}
+MTBLS349_picos = detect_nmr_peaks_from_dataset(MTBLS349, baseline_tresh =50000 , ap.method = 'own',ap.step = 0.03)
+```
+
+Contar valores omissos:
+```{r}
+count_missing_values(MTBLS349_picos)
+```
+
+Trocar valores omissos por 0 e dete?ao dos picos de NMR:
+```{r}
+MTBLS349_picos = missingvalues_imputation(MTBLS349_picos, method = 'value', value = 0)
+MTBLS349_picos = detect_nmr_peaks_from_dataset(MTBLS349_picos, baseline_tresh =50000 , ap.method = 'own',ap.step = 0.03)
+
+```
+
+Transforma??o dos dados:
+```{r}
+MTBLS349_tran=transform_data(MTBLS349_picos, method = "log")
+
+```
+
+Gr?fico de picos de NMR dos dados n?o-transformados e transformados:
+```{r}
+plot_peaks(MTBLS349_picos,"Tissue")
+plot_peaks(MTBLS349_tran,"Tissue")
+```
+
+
+#**Pathway Analysis:**
+Tabela com todos os organismos
+```{r}
+x=get_OrganismsCodes()
+```
+* Ao procurar o nosso organismo ("Oryctolagus cuniculus") observamos que o c?digo ? "ocu".
+
+Retirar ID?s dos metabolitos de interesse do base de dados KEGG:
+(retirados manualmente da internet uma vez que so tinhamos identificador CHEBI)
+```{r}
+id_HMDB=c("HMDB0000190","HMDB0000043","HMDB0000097","HMDB0000562","HMDB0000182","HMDB0000142","HMDB0000254","HMDB0000134","HMDB0000158","HMDB0000929","HMDB0000159","HMDB0000177","HMDB0000172","HMDB0000168","HMDB0000123","HMDB0000044","HMDB0000695","HMDB0000094","HMDB0000157","HMDB0000169")
+```
+
+Convers?o dos ID?s da base de dados  HMDB para os correspondentes ID?s KEGG: 
+```{r}
+id_kegg=convert_hmdb_to_kegg(id_HMDB)
+```
+
+Tabela organizada com os nomes e ID?s da base de dados KEGG:
+```{r}
+tabela=knitr::kable(cbind(names(id_kegg), id_kegg), row.names=F, col.names=c("Names", "KEGG codes"))
+```
+
+Tabela com todos os ID's dos pathways encontrados para os metabolitos de interesse:
+```{r}
+paths=get_paths_with_cpds_org("ocu", id_kegg)
+tabela2=knitr::kable(paths)
+```
+
+Esquema de todos os pathways encontrados para os metabolitos de interesse:
+```{r, fig.show='hold'}
+pathway_analysis(id_kegg, "ocu00230", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00120", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00380", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00520", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00564", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00860", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00052", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00010", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00480", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00310", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00640", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00350", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00051", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00280", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00410", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00340", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00650", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00220", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00260", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00620", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00630", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00053", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00780", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00130", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00250", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00020", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00360", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00970", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00290", nodeNames="names", map.zoom=T, nodeTooltip=T)
+pathway_analysis(id_kegg, "ocu00400", nodeNames="names", map.zoom=T, nodeTooltip=T)
+```
+
+##**Enriquecimento:**
+Cria?ao de um gr?fico com todos os pathways dos metabolitos de interesse:
+```{r}
+graph=buildGraphFromKEGGREST(organism="ocu")
+tmpdir=paste0(tempdir(), "/my_database")
+unlink(tmpdir, recursive = TRUE)
+buildDataFromGraph(keggdata.graph = graph,databaseDir = tmpdir,internalDir = FALSE,matrices = "diffusion",normality = "diffusion",niter = 50)
+fella.data=loadKEGGdata(databaseDir = tmpdir,internalDir = FALSE,loadMatrix = "diffusion")
+cat(getInfo(fella.data))
+id_keggs=c("C00186","C00719","C00114","C00791","C00047","C00058","C00042","C00122","C00082","C00078","C00079","C00135","C00407","C00152","C00037","C00072","C00233","C00158","C00262","C00159")
+analysis= enrich(compounds = id_keggs,data = fella.data,methods = "diffusion")
+plot(analysis,method = "diffusion",data = fella.data,nlimit = 150,vertex.label.cex = 0.5,plotLegend = FALSE)
+```
+
+* Os metabolitos de interesse foram escolhidos atrav?s dos resultados obtidos pelo teste estat?stico ANOVA ao dataset com fdr < 0.05. O teste ANOVA foi escolhido uma vez que o dataset cont?m mais do que duas vari?veis a serem estudadas.  
+* Ao analisar os gr?ficos referentes ao fold change, conclu?mos que, as amostras relativas ao humor aquoso t?m, em maior quantidade, os metabolitos seguintes: lisina, formato, triptofano, histidina, isoleucina, glicina, ketoleucina, citrato e hipoxantina. Estes metabolitos estar?o envolvidos na s?ntese da carnitina, metabolismo da metil-histidina e no metabolismo da biotina.
+Nas amostras do humor v?treo observamos, que o metabolito ascorbato est? em maior quantidade relativamente aos restantes. Este metabolito est? envolvido no metabolismo do aldarato e ascorbato.
+Em rela??o ?s amostras de sangue, verificamos que existe uma maior quantidade de formato, ascorbato e ketoleucina. Estes metabolitos est?o envolvidos na bios?ntese da arginina, valina, leucina e isoleucina, no ciclo do citrato (TCA), metabolismo da alanina, aspargina, glutamato e piruvato, e na degrada??o de valina, leucina e isoleucina. Resultados semelhantes foram descritos por Zelentsova et al., (2016) num artigo que descreve o dataset em estudo.
+
+##**Refer?ncias:**
+-Zelentsova, E.A., Yanshole, L.V., Snytnikova, O.A. et al. Metabolomics (2016) 12: 172. https://doi.org/10.1007/s11306-016-1118-2
+- https://www.metaboanalyst.ca/MetaboAnalyst/faces/home.xhtml
+- https://www.ebi.ac.uk/
+- https://cran.r-project.org/web/packages/specmine/index.html
+- http://bioconductor.riken.jp/packages/3.7/bioc/vignettes/FELLA/inst/doc/FELLA.pdf
+
+
+
+
+
+
+
